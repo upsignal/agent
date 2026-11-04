@@ -1,0 +1,17 @@
+# /etc/upsignal-agent/config.yaml — non-secret settings only.
+# The agent credential is stored separately in /var/lib/upsignal-agent/agent-credential.
+api:
+  base_url: "https://api.example.com"
+  request_timeout: 10s
+
+collection:
+  interval: 30s
+  upload_interval: 60s
+
+spool:
+  enabled: true
+  max_age: 24h
+  max_size: 50MB
+
+logging:
+  level: info

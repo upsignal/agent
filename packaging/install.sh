@@ -44,8 +44,6 @@ done
 case $VERSION in "@"*"@") fail "this copy of install.sh is not from a release; pass --version" ;; esac
 VERSION=${VERSION#v}
 printf '%s' "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$' || fail "invalid version $VERSION"
-# Release tag v1.3.0-rc1 ships upsignal-agent_1.3.0~rc1_<arch>.deb (see packaging/deb-version.sh).
-DEB_VERSION=$(printf '%s' "$VERSION" | sed 's/-/~/')
 [ "$(id -u)" -eq 0 ] || fail "run as root: sudo sh install.sh"
 case $API_URL in
 "" | https://*) ;;
@@ -90,7 +88,8 @@ esac
 
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
-DEB=upsignal-agent_${DEB_VERSION}_${ARCH}.deb
+# Named after the release tag; inside, a pre-release's package version uses '~' (1.3.0~rc1).
+DEB=upsignal-agent_${VERSION}_${ARCH}.deb
 echo "Downloading upsignal-agent $VERSION ($ARCH)..."
 fetch "$BASE_URL/$DEB" "$TMP/$DEB" || fail "download failed: $BASE_URL/$DEB"
 fetch "$BASE_URL/SHA256SUMS" "$TMP/SHA256SUMS" || fail "download failed: $BASE_URL/SHA256SUMS"

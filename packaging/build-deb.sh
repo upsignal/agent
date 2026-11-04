@@ -1,5 +1,5 @@
 #!/bin/sh
-# Builds dist/upsignal-agent_<version>_<arch>.deb from an already built Linux binary.
+# Builds <out-dir>/upsignal-agent_<version>_<arch>.deb from an already built Linux binary.
 # Usage: packaging/build-deb.sh <amd64|arm64> <debian-version> <binary> <out-dir>  (see deb-version.sh)
 # Needs dpkg-deb; `make deb` runs this in a Debian container when the host has none.
 set -eu
@@ -45,5 +45,8 @@ Description: Upsignal server monitoring agent
 EOF
 
 mkdir -p "$OUT"
-dpkg-deb --root-owner-group -Zxz --build "$ROOT" "$OUT/upsignal-agent_${VERSION}_${ARCH}.deb" >/dev/null
-echo "$OUT/upsignal-agent_${VERSION}_${ARCH}.deb"
+# The file name uses '-' where the package version has '~' (1.3.0~rc1 -> upsignal-agent_1.3.0-rc1_amd64.deb):
+# GitHub renames release assets containing '~', and this way the name matches the release tag.
+FILE=$OUT/upsignal-agent_$(printf '%s' "$VERSION" | tr '~' '-')_${ARCH}.deb
+dpkg-deb --root-owner-group -Zxz --build "$ROOT" "$FILE" >/dev/null
+echo "$FILE"

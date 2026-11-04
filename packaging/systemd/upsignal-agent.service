@@ -7,7 +7,9 @@ After=network-online.target
 ConditionPathExists=/var/lib/upsignal-agent/agent-credential
 
 [Service]
-Type=simple
+# exec, not simple: the unit is only "active" once the sandboxed binary is running, so a failed exec or
+# sandbox setup fails the start instead of reporting success.
+Type=exec
 ExecStart=/usr/bin/upsignal-agent run --config /etc/upsignal-agent/config.yaml
 User=upsignal-agent
 Group=upsignal-agent

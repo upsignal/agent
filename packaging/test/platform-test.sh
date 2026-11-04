@@ -32,6 +32,10 @@ wait_for() {
 	return 1
 }
 main_pid() { sut systemctl show -p MainPID --value upsignal-agent; }
+# True once the main process has exec'd the agent. Before that it is systemd's forked child: still root and
+# still holding capabilities while it sets up the sandbox. Checked by process name: until exec, systemd names the child "(upsignal-agent)" (truncated), and /proc/PID/exe
+# is unreliable under CPU emulation.
+agent_running() { [ "$(sut cat "/proc/$(main_pid)/comm")" = upsignal-agent ]; }
 is_active() { [ "$(sut systemctl is-active upsignal-agent)" = active ]; }
 cleanup() {
 	if [ "$failures" -gt 0 ]; then sut journalctl -u upsignal-agent --no-pager -n 40 || true; fi
@@ -71,8 +75,9 @@ sut sed -i 's|^  base_url:.*|  base_url: "https://upsignal.invalid"|' /etc/upsig
 sut sh -c "printf '%s' '{\"agentId\":\"test\",\"monitorId\":\"test\",\"credential\":\"not-a-real-secret\",\"baseUrl\":\"https://upsignal.invalid\",\"enrolledAt\":\"2026-01-01T00:00:00Z\"}' >$STATE/agent-credential && chown upsignal-agent: $STATE/agent-credential && chmod 600 $STATE/agent-credential"
 sut systemctl enable --now upsignal-agent >/dev/null 2>&1
 check "active once enrolled" wait_for 15 is_active
+check "agent binary running" wait_for 15 agent_running
 PID=$(main_pid)
-check "runs as upsignal-agent" bash -c "[ \"\$(docker exec $C ps -o user= -p $PID)\" = upsignal-agent ]"
+check "runs as upsignal-agent" bash -c "[ \"\$(docker exec $C ps -o user:32= -p $PID)\" = upsignal-agent ]"
 check "no effective capabilities" bash -c "docker exec $C grep -Eq '^CapEff:\s+0+$' /proc/$PID/status"
 check "no listening sockets" bash -c "! docker exec $C ss -lntup | grep -q upsignal"
 AS_AGENT_ARGS=(nsenter -t "$PID" -m setpriv --reuid upsignal-agent --regid upsignal-agent --clear-groups)

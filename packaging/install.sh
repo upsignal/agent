@@ -58,6 +58,7 @@ esac
 # Supported systems only: the agent is tested on these and relies on their systemd features.
 [ -r /etc/os-release ] || fail "cannot read /etc/os-release"
 # Read os-release in a subshell: it defines VERSION, which would clobber ours.
+# shellcheck source=/dev/null
 os() { (. /etc/os-release && eval "printf '%s' \"\${$1:-}\""); }
 OS_ID=$(os ID)
 OS_VERSION=$(os VERSION_ID)

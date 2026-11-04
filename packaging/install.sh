@@ -6,16 +6,22 @@
 #   sudo sh install.sh
 #
 # Options:
-#   --version <version>   release to install (defaults to the release this script was published with)
+#   --version <version>   release to install, e.g. 1.2.0 (defaults to the release this script came from)
 #   --api-url <url>       set api.base_url, for self-hosted Upsignal (default https://api.upsignal.cloud)
 #   --no-enroll           only install; run `sudo upsignal-agent enroll` later
 #   --base-url <url>      download from this URL instead of GitHub releases (mirrors, testing)
+#   --require-signature   fail unless cosign is installed to verify the release signature
+#
+# The .deb is always checked against the release's SHA256SUMS. If cosign is installed, SHA256SUMS itself is
+# verified first: it must be signed by this repository's release workflow for exactly this version tag.
 set -eu
 
 VERSION="@VERSION@"
 API_URL=
 ENROLL=1
 BASE_URL=
+REQUIRE_SIGNATURE=0
+REPO=upsignal/agent
 
 fail() {
 	echo "install.sh: $*" >&2
@@ -28,7 +34,8 @@ while [ $# -gt 0 ]; do
 	--api-url) [ $# -ge 2 ] || fail "--api-url needs a value"; API_URL=$2; shift 2 ;;
 	--base-url) [ $# -ge 2 ] || fail "--base-url needs a value"; BASE_URL=$2; shift 2 ;;
 	--no-enroll) ENROLL=0; shift ;;
-	-h | --help) sed -n '2,14p' "$0"; exit 0 ;;
+	--require-signature) REQUIRE_SIGNATURE=1; shift ;;
+	-h | --help) sed -n '2,18p' "$0"; exit 0 ;;
 	*) fail "unknown option $1 (see --help)" ;;
 	esac
 done
@@ -36,7 +43,9 @@ done
 # Releases replace the placeholder above; the pattern here is split so that substitution leaves it alone.
 case $VERSION in "@"*"@") fail "this copy of install.sh is not from a release; pass --version" ;; esac
 VERSION=${VERSION#v}
-printf '%s' "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+([.+~][0-9A-Za-z.+~]*)?$' || fail "invalid version $VERSION"
+printf '%s' "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$' || fail "invalid version $VERSION"
+# Release tag v1.3.0-rc1 ships upsignal-agent_1.3.0~rc1_<arch>.deb (see packaging/deb-version.sh).
+DEB_VERSION=$(printf '%s' "$VERSION" | sed 's/-/~/')
 [ "$(id -u)" -eq 0 ] || fail "run as root: sudo sh install.sh"
 case $API_URL in
 "" | https://*) ;;
@@ -72,7 +81,7 @@ elif command -v wget >/dev/null; then
 else
 	fail "curl or wget is required"
 fi
-BASE_URL=${BASE_URL:-https://github.com/upsignal/agent/releases/download/v$VERSION}
+BASE_URL=${BASE_URL:-https://github.com/$REPO/releases/download/v$VERSION}
 case $BASE_URL in
 https://*) ;;
 *) fail "--base-url must start with https://" ;;
@@ -80,10 +89,24 @@ esac
 
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
-DEB=upsignal-agent_${VERSION}_${ARCH}.deb
+DEB=upsignal-agent_${DEB_VERSION}_${ARCH}.deb
 echo "Downloading upsignal-agent $VERSION ($ARCH)..."
 fetch "$BASE_URL/$DEB" "$TMP/$DEB" || fail "download failed: $BASE_URL/$DEB"
 fetch "$BASE_URL/SHA256SUMS" "$TMP/SHA256SUMS" || fail "download failed: $BASE_URL/SHA256SUMS"
+
+if command -v cosign >/dev/null; then
+	fetch "$BASE_URL/SHA256SUMS.sigstore.json" "$TMP/SHA256SUMS.sigstore.json" ||
+		fail "download failed: $BASE_URL/SHA256SUMS.sigstore.json"
+	cosign verify-blob "$TMP/SHA256SUMS" --bundle "$TMP/SHA256SUMS.sigstore.json" \
+		--certificate-identity "https://github.com/$REPO/.github/workflows/release.yml@refs/tags/v$VERSION" \
+		--certificate-oidc-issuer https://token.actions.githubusercontent.com >/dev/null 2>&1 ||
+		fail "SHA256SUMS is not signed by the $REPO release workflow for v$VERSION; not installing"
+	echo "Release signature verified."
+elif [ "$REQUIRE_SIGNATURE" -eq 1 ]; then
+	fail "--require-signature needs cosign (https://docs.sigstore.dev/cosign/system_config/installation/)"
+else
+	echo "Note: cosign is not installed, so only the checksum is verified, not the release signature."
+fi
 # Exactly one line for this file, and it must match; anything else aborts before installing.
 # Exact string match on the file name: versions contain characters that are special in regexes.
 awk -v f="$DEB" 'NF == 2 && $2 == f && $1 ~ /^[0-9a-f]+$/ && length($1) == 64' "$TMP/SHA256SUMS" >"$TMP/expected"

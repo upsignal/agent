@@ -1,0 +1,86 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: stable
+          check-latest: true
+      - name: Format
+        run: make fmt
+      - name: Vet
+        run: make vet
+      - name: Unit tests
+        run: make test
+      - name: Shellcheck packaging scripts
+        run: shellcheck -s sh packaging/*.sh packaging/deb/* && shellcheck packaging/test/*.sh
+      - name: Verify go.mod is tidy
+        run: go mod tidy -diff
+
+  package:
+    name: Build packages
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: stable
+          check-latest: true
+      - name: Build binaries and .deb packages
+        run: make deb
+      - name: Build an upgrade package for the platform test
+        run: |
+          version=$(dpkg-deb -f dist/upsignal-agent_*_amd64.deb Version)
+          mkdir -p upgrade
+          packaging/build-deb.sh amd64 "${version}.1" dist/upsignal-agent-linux-amd64 upgrade
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: packages
+          path: |
+            dist/*.deb
+            upgrade/*.deb
+          retention-days: 7
+
+  platform:
+    name: Platform test (${{ matrix.image }})
+    needs: package
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        image: ['ubuntu:22.04', 'ubuntu:24.04', 'debian:12']
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: packages
+      - name: Install, run, crash, upgrade and purge under systemd
+        run: packaging/test/platform-test.sh "${{ matrix.image }}" dist/upsignal-agent_*_amd64.deb upgrade/upsignal-agent_*_amd64.deb

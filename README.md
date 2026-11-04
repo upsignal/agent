@@ -26,7 +26,9 @@ sudo sh install.sh
 ```
 
 The installer checks the OS and architecture, downloads that release's `.deb`, and verifies it against the
-release's `SHA256SUMS` before installing anything. It then asks for the enrollment token and starts the service.
+release's `SHA256SUMS` before installing anything. When [cosign](https://docs.sigstore.dev/cosign/system_config/installation/)
+is installed, it first checks that `SHA256SUMS` was signed by this repository's release workflow for that exact
+tag (`--require-signature` makes that mandatory). It then asks for the enrollment token and starts the service.
 Each published `install.sh` installs exactly its own release; `--version` picks another one. Other options:
 `--api-url` for self-hosted Upsignal, `--no-enroll` to only install, and `--base-url` for a mirror.
 
@@ -107,7 +109,28 @@ make test    # unit tests (they run on macOS too; only statfs is Linux-specific)
 make vet     # vet for the host OS and Linux
 make linux   # dist/upsignal-agent-linux-{amd64,arm64} plus SHA256SUMS
 make deb     # also the .deb packages and a version-pinned install.sh (uses Docker if dpkg-deb is missing)
+
+# Install, run, crash, upgrade and purge the .deb under real systemd (needs Docker; no API required)
+packaging/test/platform-test.sh ubuntu:24.04 dist/upsignal-agent_<v>_<arch>.deb <newer>.deb
 ```
+
+CI ([.github/workflows/ci.yml](.github/workflows/ci.yml)) runs formatting, vet, race-enabled tests and shellcheck,
+builds the packages, and runs the platform test on Ubuntu 22.04, Ubuntu 24.04 and Debian 12 for every push and
+pull request.
+
+## Releasing
+
+Tag a commit on `main` and push the tag:
+
+```bash
+git tag v1.0.0 && git push origin v1.0.0     # v1.1.0-rc1 publishes a pre-release
+```
+
+[release.yml](.github/workflows/release.yml) reruns CI, builds with the latest stable Go, signs `SHA256SUMS`
+keylessly with cosign (the signature is tied to the workflow's GitHub identity, so there is no key to leak),
+and publishes a GitHub release with both binaries, both `.deb` files, a version-pinned `install.sh`,
+`SHA256SUMS`, `SHA256SUMS.sigstore.json`, and notes listing the commit and toolchain. Set the `DEB_MAINTAINER`
+repository variable (`Name <email>`) for the package maintainer field.
 
 ## Metrics
 

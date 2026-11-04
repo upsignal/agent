@@ -24,7 +24,7 @@ deb: linux
 		docker run --rm -v "$(CURDIR):/src" -w /src debian:12-slim sh -c \
 			'for a in amd64 arm64; do packaging/build-deb.sh $$a "$(DEB_VERSION)" dist/upsignal-agent-linux-$$a dist; done'; \
 	fi
-	sed "s/@VERSION@/$(DEB_VERSION)/" packaging/install.sh > dist/install.sh
+	sed "s/@VERSION@/$(VERSION:v%=%)/" packaging/install.sh > dist/install.sh
 	cd dist && shasum -a 256 upsignal-agent-linux-* *.deb install.sh > SHA256SUMS
 
 test:

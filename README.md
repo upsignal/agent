@@ -13,23 +13,58 @@ Targets Ubuntu 22.04+ and Debian 12+ with systemd, on `amd64` and `arm64`.
 | M2 Linux collectors: CPU, memory, swap, disk, inodes, load, uptime, network | done |
 | M3 Enrollment and credentials | done |
 | M4 Telemetry delivery: batching, spool, retry | done |
-| M5 systemd packaging and `.deb` | not started |
+| M5 systemd packaging, `.deb` and verified installer | done |
+
+## Install
+
+On Ubuntu 22.04+ or Debian 12+ (`amd64` or `arm64`), create a server in Upsignal, then:
+
+```bash
+curl -fsSLO https://github.com/upsignal/agent/releases/download/v<version>/install.sh
+less install.sh
+sudo sh install.sh
+```
+
+The installer checks the OS and architecture, downloads that release's `.deb`, and verifies it against the
+release's `SHA256SUMS` before installing anything. It then asks for the enrollment token and starts the service.
+Each published `install.sh` installs exactly its own release; `--version` picks another one. Other options:
+`--api-url` for self-hosted Upsignal, `--no-enroll` to only install, and `--base-url` for a mirror.
+
+Installing the `.deb` directly works too (`sudo apt install ./upsignal-agent_<version>_<arch>.deb`). The service
+stays inactive until `sudo upsignal-agent enroll` has stored a credential; then
+`sudo systemctl enable --now upsignal-agent`.
+
+| Path | Contents | Mode |
+| --- | --- | --- |
+| `/usr/bin/upsignal-agent` | binary | `0755 root` |
+| `/etc/upsignal-agent/config.yaml` | settings, kept across upgrades | `0640 root:upsignal-agent` |
+| `/var/lib/upsignal-agent/` | credential, sequence counter, status, spool | `0700 upsignal-agent` |
+| `/usr/lib/systemd/system/upsignal-agent.service` | hardened unit | `0644 root` |
+
+**Upgrades** (`sudo sh install.sh --version <new>`, or `apt install` of a newer `.deb`) restart the running
+service and keep the credential, local config edits, spooled telemetry, and the sample sequence.
+**Rollback** is installing the older `.deb` the same way. `apt remove` stops the service and keeps the
+enrollment; `apt purge` also deletes `/etc/upsignal-agent` and `/var/lib/upsignal-agent`.
+
+The service runs as the `upsignal-agent` system user (no shell, no home) with no capabilities, a read-only view
+of the system except its state directory, a restricted syscall set, and `MemoryMax=128M`; see
+[packaging/systemd/upsignal-agent.service](packaging/systemd/upsignal-agent.service). It restarts after a crash,
+but not after exit code `3` (revoked).
 
 ## Commands
 
 ```bash
 upsignal-agent version
 upsignal-agent enroll   [--config path] [--force]   # reads the enrollment token from the terminal or stdin
-upsignal-agent status   [--config path]
+upsignal-agent status   [--config path]          # needs sudo: the state is readable only by root and the agent
 upsignal-agent diagnose [--config path]   # config, enrollment, DNS, TLS and API checks, plus a test sample
 upsignal-agent run      [--config path]   # what the systemd service runs
 ```
 
-Exit codes: `0` success, `1` error, `2` usage error, `3` the agent was revoked (systemd should not restart it:
-`RestartPreventExitStatus=3`).
+Exit codes: `0` success, `1` error, `2` usage error, `3` the agent was revoked.
 
 The config file defaults to `/etc/upsignal-agent/config.yaml`; see
-[packaging/config.example.yaml](packaging/config.example.yaml). Unknown keys are rejected, and `api.base_url`
+[packaging/config.yaml](packaging/config.yaml). Unknown keys are rejected, and `api.base_url`
 must be HTTPS. There is no setting to turn TLS verification off.
 
 ## Enrollment
@@ -71,6 +106,7 @@ agent makes one last upload attempt for up to 5 seconds.
 make test    # unit tests (they run on macOS too; only statfs is Linux-specific)
 make vet     # vet for the host OS and Linux
 make linux   # dist/upsignal-agent-linux-{amd64,arm64} plus SHA256SUMS
+make deb     # also the .deb packages and a version-pinned install.sh (uses Docker if dpkg-deb is missing)
 ```
 
 ## Metrics

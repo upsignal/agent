@@ -1,0 +1,34 @@
+#!/bin/sh
+set -e
+
+USER=upsignal-agent
+STATE=/var/lib/upsignal-agent
+CONF=/etc/upsignal-agent
+
+case "$1" in
+configure)
+	if ! getent passwd "$USER" >/dev/null; then
+		useradd --system --user-group --no-create-home --home-dir /nonexistent \
+			--shell /usr/sbin/nologin --comment "Upsignal agent" "$USER"
+	fi
+	# The config holds no secrets, but only root and the agent need to read it.
+	chown root:"$USER" "$CONF" "$CONF/config.yaml"
+	chmod 0750 "$CONF"
+	chmod 0640 "$CONF/config.yaml"
+	install -d -m 0700 -o "$USER" -g "$USER" "$STATE"
+
+	if [ -d /run/systemd/system ]; then
+		systemctl daemon-reload >/dev/null || true
+		# On upgrade, pick up the new binary; credentials and spooled telemetry are kept.
+		if [ -n "$2" ]; then
+			systemctl try-restart upsignal-agent.service >/dev/null || true
+		fi
+	fi
+
+	if [ ! -e "$STATE/agent-credential" ]; then
+		echo "upsignal-agent installed. Enroll it with: sudo upsignal-agent enroll"
+	fi
+	;;
+esac
+
+exit 0

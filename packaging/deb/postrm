@@ -1,0 +1,17 @@
+#!/bin/sh
+set -e
+
+case "$1" in
+remove)
+	if [ -d /run/systemd/system ]; then
+		systemctl daemon-reload >/dev/null || true
+	fi
+	;;
+purge)
+	# Purging deletes the credential and any telemetry that was never sent. The system user is kept,
+	# as is usual for Debian packages, so files it might still own elsewhere keep a valid owner.
+	rm -rf /var/lib/upsignal-agent /etc/upsignal-agent
+	;;
+esac
+
+exit 0

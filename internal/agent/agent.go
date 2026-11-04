@@ -134,6 +134,8 @@ func (a *Agent) Run(ctx context.Context) error {
 	a.log.Info("host detected", "os", deref(host.OS), "osVersion", deref(host.OSVersion),
 		"kernel", deref(host.Kernel), "arch", host.Architecture)
 
+	// The first upload happens right away; give it a sample so a new server shows metrics immediately.
+	a.collectOnce()
 	collectCtx, stopCollect := context.WithCancel(context.Background())
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -156,12 +158,12 @@ func (a *Agent) collectLoop(ctx context.Context) {
 	ticker := time.NewTicker(time.Duration(a.cfg.Collection.Interval))
 	defer ticker.Stop()
 	for {
-		a.collectOnce()
 		select {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
 		}
+		a.collectOnce()
 	}
 }
 

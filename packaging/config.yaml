@@ -1,7 +1,8 @@
-# /etc/upsignal-agent/config.yaml — non-secret settings only.
+# /etc/upsignal-agent/config.yaml — non-secret settings only. Restart the service after editing:
+#   sudo systemctl restart upsignal-agent
 # The agent credential is stored separately in /var/lib/upsignal-agent/agent-credential.
 api:
-  base_url: "https://api.example.com"
+  base_url: "https://api.upsignal.cloud"
   request_timeout: 10s
 
 collection:

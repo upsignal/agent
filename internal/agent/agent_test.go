@@ -264,6 +264,9 @@ func TestRunStopsOnCancelAndFlushes(t *testing.T) {
 	if len(h.fake.requests) < 2 {
 		t.Fatalf("requests = %v, want startup upload and shutdown flush", h.fake.requests)
 	}
+	if len(h.fake.requests[0]) == 0 {
+		t.Fatal("the startup upload should carry a sample, so a new server shows metrics right away")
+	}
 	var seen []uint64
 	for _, r := range h.fake.requests {
 		seen = append(seen, r...)

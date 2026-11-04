@@ -1,0 +1,60 @@
+[Unit]
+Description=Upsignal server monitoring agent
+Documentation=https://github.com/upsignal/agent
+Wants=network-online.target
+After=network-online.target
+# Stay inactive until `sudo upsignal-agent enroll` has stored a credential.
+ConditionPathExists=/var/lib/upsignal-agent/agent-credential
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/upsignal-agent run --config /etc/upsignal-agent/config.yaml
+User=upsignal-agent
+Group=upsignal-agent
+Restart=on-failure
+RestartSec=10s
+# Exit code 3 means the agent was revoked in Upsignal; restarting cannot help.
+RestartPreventExitStatus=3
+TimeoutStopSec=15s
+
+StateDirectory=upsignal-agent
+StateDirectoryMode=0700
+UMask=0077
+
+# Sandboxing. The agent only reads /proc, /sys and filesystem statistics, and writes its state directory.
+NoNewPrivileges=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+# read-only rather than true: true replaces /home with an empty tmpfs, which would hide a separate /home
+# filesystem from disk metrics. The agent never opens files there.
+ProtectHome=read-only
+ReadOnlyPaths=/proc /sys
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+ProtectProc=invisible
+RestrictSUIDSGID=true
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+LockPersonality=true
+MemoryDenyWriteExecute=true
+RemoveIPC=true
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources
+SystemCallErrorNumber=EPERM
+
+# Resource ceilings well above the agent's normal footprint (about 10 MB RSS).
+MemoryMax=128M
+TasksMax=64
+CPUQuota=20%
+
+[Install]
+WantedBy=multi-user.target

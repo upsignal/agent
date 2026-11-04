@@ -1,6 +1,6 @@
 // Package telemetry defines the payload shapes the agent sends to the backend.
 //
-// This is the proposed DTO from the spec (section 6), not a published API contract yet.
+// The contract is published by the API (docs/agents.md and the AgentTelemetryDto OpenAPI schema).
 // Missing metrics are encoded as JSON null, never as zero. An empty list means "collected, nothing to report";
 // null means "collection failed".
 package telemetry
@@ -17,7 +17,22 @@ type Host struct {
 	LogicalCPUs  *int    `json:"logicalCpus"`
 }
 
+// Batch is one POST /v1/agents/telemetry request body.
+type Batch struct {
+	AgentVersion string       `json:"agentVersion"`
+	SentAt       time.Time    `json:"sentAt"`
+	Host         *Host        `json:"host,omitempty"`
+	Samples      []Sample     `json:"samples"`
+	AgentHealth  *AgentHealth `json:"agentHealth,omitempty"`
+}
+
+type AgentHealth struct {
+	CollectorErrors []CollectorError `json:"collectorErrors"`
+}
+
 type Sample struct {
+	// Sequence is per sample and never reused by this installation; the backend deduplicates on it.
+	Sequence   uint64    `json:"sequence"`
 	ObservedAt time.Time `json:"observedAt"`
 	// BootID changes on every reboot, so the backend can detect resets of cumulative counters.
 	BootID            *string            `json:"bootId"`

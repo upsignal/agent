@@ -37,7 +37,8 @@ jobs:
           if ! printf '%s' "$TAG" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$'; then
             echo "::error::$TAG is not a release tag like v1.2.0 or v1.3.0-rc1"; exit 1
           fi
-          git fetch --no-tags origin main
+          # fetch-depth: 0 already fetched every branch; git has no credentials here (persist-credentials: false).
+          git rev-parse --verify -q origin/main >/dev/null || { echo "::error::origin/main was not fetched"; exit 1; }
           if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
             echo "::error::$TAG points at a commit that is not on main"; exit 1
           fi
